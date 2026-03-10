@@ -153,6 +153,72 @@ const THALI_ITEMS = [
   { id: 'ti-stkd',   nameBn: 'শোলের ভর্তা',   price: 35, type: 'side' },
 ];
 
+// ─── DELIVERY ZONES & PAYMENT ─────────────────────────────────────────────────
+const DELIVERY_ZONES = [
+  { id: 'mirpur',  label: 'মিরপুর',               fee: 40 },
+  { id: 'savar',   label: 'সাভার',                fee: 80 },
+  { id: 'dhaka',   label: 'ঢাকার যেকোনো এলাকা',   fee: 60 },
+  { id: 'pickup',  label: 'পিকআপ / Pickup',        fee: 0  },
+];
+
+const DELIVERY_TIMES = [
+  'এখনই (ASAP)',
+  'দুপুর ১২–২টা',
+  'বিকেল ৪–৬টা',
+  'সন্ধ্যা ৭–৯টা',
+  'আগামীকাল সকাল',
+];
+
+const PAYMENT_NUMBER = '01820057581';
+
+const QUICK_TAGS = ['ঝাল কম 🌶️', 'পেঁয়াজ ছাড়া', 'দ্রুত দরকার ⚡', 'কম তেল 🥗'];
+
+const UPSELL_ITEMS = [
+  { id: 'ups-doi',   nameBn: 'মিষ্টি দই',  price: 60, img: '/images/mishti-doi.jpg',  emoji: '🍮' },
+  { id: 'ups-borh',  nameBn: 'বোরহানি',    price: 50, img: '/images/borhani.jpg',     emoji: '🥛' },
+  { id: 'ups-halwa', nameBn: 'হালুয়া',     price: 80, img: '/images/halwa.jpg',       emoji: '🟡' },
+];
+
+// ─── WA MESSAGE BUILDER ────────────────────────────────────────────────────────
+const buildWAMessage = (order, cart, subtotal, deliveryFee) => {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+  const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const rand = String(Math.floor(Math.random() * 900) + 100);
+  const orderId = `SHH-${dateStr}-${timeStr}-${rand}`;
+  const total = subtotal + deliveryFee;
+  const zoneLabel = DELIVERY_ZONES.find(z => z.id === order.zone)?.label || order.zone;
+  const payLabels = { cod: 'COD (ক্যাশ অন ডেলিভারি)', bkash: 'bKash', nagad: 'Nagad' };
+  const payLabel = payLabels[order.payment] || order.payment;
+  const lines = [
+    `🍛 *শখের হাঁড়ি — নতুন অর্ডার*`,
+    `🆔 অর্ডার ID: ${orderId}`,
+    `━━━━━━━━━━━━━━━`,
+    `👤 নাম: ${order.name}`,
+    `📱 মোবাইল: ${order.phone}`,
+    `📍 এলাকা: ${zoneLabel} | ⏰ সময়: ${order.time}`,
+    `━━━━━━━━━━━━━━━`,
+    `🛒 অর্ডার তালিকা:`,
+    ...cart.map(i => `${i.qty}× ${i.nameBn} — ৳${i.price * i.qty}`),
+    `━━━━━━━━━━━━━━━`,
+    `🧾 সাবটোটাল: ৳${subtotal}`,
+    `🚴 ডেলিভারি: ৳${deliveryFee}`,
+    `💰 *মোট: ৳${total}*`,
+    `━━━━━━━━━━━━━━━`,
+    `💳 পেমেন্ট: ${payLabel}`,
+  ];
+  if (order.payment === 'bkash' || order.payment === 'nagad') {
+    lines.push(`📲 পেমেন্ট নম্বর: ${PAYMENT_NUMBER}`);
+  }
+  if (order.txid) lines.push(`🔖 TxID: ${order.txid}`);
+  if (order.address) lines.push(`🏠 ঠিকানা: ${order.address}`);
+  if (order.notes) lines.push(`📝 নির্দেশনা: ${order.notes}`);
+  lines.push(`━━━━━━━━━━━━━━━`);
+  lines.push(`✨ উদ্যোক্তা: নুসরাত জাহান`);
+  return lines.join('\n');
+};
+
 // ─── GLOBAL CSS ────────────────────────────────────────────────────────────────
 const GlobalStyle = () => {
   useEffect(() => {
@@ -177,6 +243,7 @@ const GlobalStyle = () => {
       .scale-in { animation: scaleIn 0.4s cubic-bezier(.22,1,.36,1) both; }
       input, textarea, button { font-family: 'Hind Siliguri', sans-serif; }
       img { display: block; }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
     `;
     document.head.appendChild(s);
     return () => document.head.removeChild(s);
@@ -264,10 +331,11 @@ const CatPill = ({ cat, active, onClick }) => {
 };
 
 // ─── MENU CARD ─────────────────────────────────────────────────────────────────
-const Card = ({ item, onAdd, onHeritage }) => {
+const Card = ({ item, onAdd, onHeritage, favorites = [], onToggleFav }) => {
   const [hov, setHov] = useState(false);
   const isFrozen = item.isFrozen;
   const isThali = item.isThali;
+  const isFav = favorites.includes(item.id);
 
   return (
     <article
@@ -330,6 +398,24 @@ const Card = ({ item, onAdd, onHeritage }) => {
             }}>{item.tags[0]}</span>
           )}
         </div>
+
+        {/* Heart — top-right */}
+        <button
+          onClick={e => { e.stopPropagation(); onToggleFav && onToggleFav(item.id); }}
+          style={{
+            position: 'absolute', top: 12, right: 12, zIndex: 3,
+            background: 'rgba(253,250,245,0.88)', backdropFilter: 'blur(6px)',
+            border: 'none', borderRadius: '50%', width: 32, height: 32,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', transition: 'transform 0.2s',
+          }}
+        >
+          <Heart
+            size={16}
+            color={isFav ? '#DC2626' : C.mist}
+            fill={isFav ? '#DC2626' : 'none'}
+          />
+        </button>
 
         {/* Price bottom-right */}
         <div style={{
@@ -674,31 +760,71 @@ const HeritageModal = ({ item, onClose, onAdd }) => {
 };
 
 // ─── CART DRAWER ───────────────────────────────────────────────────────────────
-const CartDrawer = ({ cart, open, onClose, onUpdate, totalPrice, onCheckout, loading }) => {
+const CartDrawer = ({ cart, open, onClose, onUpdate, onCheckout, onAddToCart }) => {
   const [name, setName] = useState('');
-  const [addr, setAddr] = useState('');
-  const [note, setNote] = useState('');
-  const totalItems = cart.reduce((s, i) => s + i.qty, 0);
+  const [phone, setPhone] = useState('');
+  const [payment, setPayment] = useState('');
+  const [zone, setZone] = useState('');
+  const [time, setTime] = useState('');
+  const [address, setAddress] = useState('');
+  const [notes, setNotes] = useState('');
+  const [txid, setTxid] = useState('');
+  const [errors, setErrors] = useState({});
+  const [copied, setCopied] = useState(false);
 
-  const inp = (val, set, ph, rows = 0) => {
-    const base = {
-      width: '100%', padding: '13px 14px',
-      border: `1.5px solid ${C.sand}`, borderRadius: 11,
-      fontSize: 14, color: C.mahog, background: C.cream, outline: 'none',
-      transition: 'border-color 0.2s',
-    };
-    return rows ? (
-      <textarea value={val} onChange={e => set(e.target.value)} placeholder={ph} rows={rows}
-        style={{ ...base, resize: 'none' }}
-        onFocus={e => e.target.style.borderColor = C.clay}
-        onBlur={e => e.target.style.borderColor = C.sand} />
-    ) : (
-      <input value={val} onChange={e => set(e.target.value)} placeholder={ph}
-        style={base}
-        onFocus={e => e.target.style.borderColor = C.clay}
-        onBlur={e => e.target.style.borderColor = C.sand} />
-    );
+  const totalItems = cart.reduce((s, i) => s + i.qty, 0);
+  const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const deliveryFee = zone ? (DELIVERY_ZONES.find(z => z.id === zone)?.fee ?? 0) : 0;
+  const total = subtotal + (zone ? deliveryFee : 0);
+  const isPickup = zone === 'pickup';
+  const showPayNum = payment === 'bkash' || payment === 'nagad';
+
+  const copyPayNum = () => {
+    navigator.clipboard?.writeText(PAYMENT_NUMBER).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
+
+  const appendTag = (tag) => setNotes(prev => prev ? `${prev} ${tag}` : tag);
+
+  const handleSubmit = () => {
+    const errs = {};
+    if (!name.trim()) errs.name = 'নাম দিন';
+    if (!/^01\d{9}$/.test(phone.trim())) errs.phone = 'সঠিক মোবাইল নম্বর দিন (যেমন: 01XXXXXXXXX)';
+    if (!payment) errs.payment = 'পেমেন্ট পদ্ধতি বেছে নিন';
+    if (!zone) errs.zone = 'ডেলিভারি এলাকা বেছে নিন';
+    if (!time) errs.time = 'ডেলিভারি সময় বেছে নিন';
+    if (!isPickup && !address.trim()) errs.address = 'ঠিকানা দিন';
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setErrors({});
+    onCheckout({
+      name: name.trim(), phone: phone.trim(), payment, zone, time,
+      address: isPickup ? '' : address.trim(),
+      notes: notes.trim(), txid: txid.trim(),
+    });
+  };
+
+  const inpStyle = (hasErr) => ({
+    width: '100%', padding: '12px 14px',
+    border: `1.5px solid ${hasErr ? '#DC2626' : C.sand}`, borderRadius: 11,
+    fontSize: 14, color: C.mahog, background: C.cream, outline: 'none',
+    transition: 'border-color 0.2s', fontFamily: "'Hind Siliguri', sans-serif",
+  });
+
+  const errText = (key) => errors[key] ? (
+    <p style={{ fontSize: 11, color: '#DC2626', marginTop: 4 }}>{errors[key]}</p>
+  ) : null;
+
+  const pillStyle = (active, color) => ({
+    padding: '9px 15px', borderRadius: 30,
+    border: `1.5px solid ${active ? color : C.sand}`,
+    background: active ? color + '18' : C.white,
+    color: active ? color : C.mahog,
+    fontWeight: 700, fontSize: 13, cursor: 'pointer',
+    transition: 'all 0.2s', whiteSpace: 'nowrap',
+    boxShadow: active ? `0 2px 10px ${color}28` : 'none',
+    fontFamily: "'Hind Siliguri', sans-serif",
+  });
 
   return (
     <>
@@ -755,6 +881,7 @@ const CartDrawer = ({ cart, open, onClose, onUpdate, totalPrice, onCheckout, loa
             </div>
           ) : (
             <div>
+              {/* Cart items */}
               {cart.map(item => (
                 <div key={item.id + item.nameBn} style={{
                   display: 'flex', alignItems: 'center', gap: 12,
@@ -786,7 +913,37 @@ const CartDrawer = ({ cart, open, onClose, onUpdate, totalPrice, onCheckout, loa
                 </div>
               ))}
 
-              {/* Subtotal */}
+              {/* Upsell strip */}
+              <div style={{ marginBottom: 18 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: C.mahog, marginBottom: 10 }}>সাথে যোগ করুন 🍮</p>
+                <div className="hs" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 6 }}>
+                  {UPSELL_ITEMS.map(u => (
+                    <div key={u.id} style={{
+                      flexShrink: 0, background: C.white, borderRadius: 14,
+                      border: `1px solid ${C.sand}`, padding: '10px 12px',
+                      display: 'flex', alignItems: 'center', gap: 10, minWidth: 160,
+                    }}>
+                      <div style={{ width: 50, height: 50, borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
+                        <Img src={u.img} alt={u.nameBn} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 13, fontWeight: 700, color: C.mahog }}>{u.nameBn}</div>
+                        <div style={{ color: C.clay, fontWeight: 700, fontSize: 12 }}>৳{u.price}</div>
+                      </div>
+                      <button
+                        onClick={() => onAddToCart && onAddToCart(u)}
+                        style={{
+                          width: 28, height: 28, borderRadius: '50%', border: 'none',
+                          background: C.clay, color: 'white', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        }}
+                      ><Plus size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Price summary */}
               <div style={{ background: C.parch, borderRadius: 12, padding: '12px 16px', marginBottom: 18, border: `1px solid ${C.sand}` }}>
                 {cart.map(i => (
                   <div key={i.id + i.nameBn} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.mist, marginBottom: 4 }}>
@@ -795,21 +952,159 @@ const CartDrawer = ({ cart, open, onClose, onUpdate, totalPrice, onCheckout, loa
                   </div>
                 ))}
                 <div style={{ height: 1, background: C.sand, margin: '8px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14, color: C.mahog }}>
-                  <span>সর্বমোট</span>
-                  <span style={{ fontFamily: "'Noto Serif Bengali', serif", color: C.clay }}>৳{totalPrice}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: C.mahog, marginBottom: 4 }}>
+                  <span>সাবটোটাল</span><span>৳{subtotal}</span>
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: C.mist }}>
+                  <span>ডেলিভারি</span>
+                  <span>{zone ? (deliveryFee === 0 ? 'ফ্রি' : `৳${deliveryFee}`) : '—'}</span>
+                </div>
+                {zone && (
+                  <>
+                    <div style={{ height: 1, background: C.sand, margin: '8px 0' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}>
+                      <span style={{ fontFamily: "'Noto Serif Bengali', serif", color: C.clay }}>সর্বমোট</span>
+                      <span style={{ fontFamily: "'Noto Serif Bengali', serif", color: C.clay }}>৳{total}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {/* Form */}
-              <div style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.sand}`, padding: '18px' }}>
-                <h3 style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 15, color: C.mahog, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
+              {/* Checkout Form */}
+              <div style={{ background: C.white, borderRadius: 16, border: `1px solid ${C.sand}`, padding: '18px', marginBottom: 8 }}>
+                <h3 style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 15, color: C.mahog, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 7 }}>
                   <Info size={15} color={C.clay} /> ডেলিভারি তথ্য
                 </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {inp(name, setName, 'আপনার নাম *')}
-                  {inp(addr, setAddr, 'ডেলিভারি ঠিকানা (পিকআপ হলে খালি রাখুন)', 3)}
-                  {inp(note, setNote, 'বিশেষ নির্দেশনা (যেমন: ঝাল কম)')}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                  {/* Name */}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: C.mahog, display: 'block', marginBottom: 6 }}>নাম *</label>
+                    <input
+                      value={name} onChange={e => setName(e.target.value)}
+                      placeholder="আপনার পুরো নাম"
+                      style={inpStyle(errors.name)}
+                      onFocus={e => e.target.style.borderColor = C.clay}
+                      onBlur={e => { e.target.style.borderColor = errors.name ? '#DC2626' : C.sand; }}
+                    />
+                    {errText('name')}
+                  </div>
+
+                  {/* Phone */}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: C.mahog, display: 'block', marginBottom: 6 }}>মোবাইল নম্বর *</label>
+                    <input
+                      type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                      placeholder="01XXXXXXXXX"
+                      style={inpStyle(errors.phone)}
+                      onFocus={e => e.target.style.borderColor = C.clay}
+                      onBlur={e => { e.target.style.borderColor = errors.phone ? '#DC2626' : C.sand; }}
+                    />
+                    {errText('phone')}
+                  </div>
+
+                  {/* Payment */}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: C.mahog, display: 'block', marginBottom: 8 }}>পেমেন্ট পদ্ধতি *</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {[
+                        { id: 'cod',   label: 'COD 💵',   color: C.clay    },
+                        { id: 'bkash', label: 'bKash 🔵', color: '#E2136E' },
+                        { id: 'nagad', label: 'Nagad 🟠', color: '#F7941D' },
+                      ].map(m => (
+                        <button key={m.id} onClick={() => setPayment(m.id)} style={pillStyle(payment === m.id, m.color)}>{m.label}</button>
+                      ))}
+                    </div>
+                    {errText('payment')}
+                    {showPayNum && (
+                      <div style={{
+                        marginTop: 10, background: C.parch, border: `1px solid ${C.sand}`,
+                        borderRadius: 10, padding: '10px 14px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                      }}>
+                        <div>
+                          <p style={{ fontSize: 11, color: C.mist, marginBottom: 2 }}>পরিশোধ করুন:</p>
+                          <p style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 14, fontWeight: 700, color: C.mahog }}>
+                            {PAYMENT_NUMBER} <span style={{ fontWeight: 400, fontSize: 12, color: C.mist }}>(Personal)</span>
+                          </p>
+                        </div>
+                        <button onClick={copyPayNum} style={{
+                          padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.sand}`,
+                          background: copied ? C.green + '18' : C.white,
+                          color: copied ? C.green : C.mahog,
+                          fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+                          fontFamily: "'Hind Siliguri', sans-serif", flexShrink: 0,
+                        }}>{copied ? '✓ কপি' : 'কপি'}</button>
+                      </div>
+                    )}
+                    {showPayNum && (
+                      <input
+                        value={txid} onChange={e => setTxid(e.target.value)}
+                        placeholder="ট্রানজেকশন ID (ঐচ্ছিক)"
+                        style={{ ...inpStyle(false), marginTop: 10 }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Zone */}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: C.mahog, display: 'block', marginBottom: 8 }}>ডেলিভারি এলাকা *</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {DELIVERY_ZONES.map(z => (
+                        <button key={z.id} onClick={() => setZone(z.id)} style={pillStyle(zone === z.id, C.clay)}>
+                          {z.label}{z.fee === 0 ? ' (ফ্রি)' : ` (৳${z.fee})`}
+                        </button>
+                      ))}
+                    </div>
+                    {errText('zone')}
+                  </div>
+
+                  {/* Time */}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: C.mahog, display: 'block', marginBottom: 8 }}>ডেলিভারি সময় *</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {DELIVERY_TIMES.map(t => (
+                        <button key={t} onClick={() => setTime(t)} style={pillStyle(time === t, C.clay)}>{t}</button>
+                      ))}
+                    </div>
+                    {errText('time')}
+                  </div>
+
+                  {/* Address */}
+                  <div style={{ opacity: isPickup ? 0.4 : 1, transition: 'opacity 0.25s' }}>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: C.mahog, display: 'block', marginBottom: 6 }}>
+                      ডেলিভারি ঠিকানা {!isPickup && '*'}
+                    </label>
+                    <textarea
+                      value={address} onChange={e => setAddress(e.target.value)}
+                      placeholder="বাড়ি নং, রাস্তা, এলাকা..." rows={3} disabled={isPickup}
+                      style={{ ...inpStyle(errors.address), resize: 'none' }}
+                      onFocus={e => e.target.style.borderColor = C.clay}
+                      onBlur={e => { e.target.style.borderColor = errors.address ? '#DC2626' : C.sand; }}
+                    />
+                    {errText('address')}
+                  </div>
+
+                  {/* Notes + Quick tags */}
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: C.mahog, display: 'block', marginBottom: 6 }}>বিশেষ নির্দেশনা</label>
+                    <input
+                      value={notes} onChange={e => setNotes(e.target.value)}
+                      placeholder="যেমন: ঝাল কম, পেঁয়াজ ছাড়া..."
+                      style={inpStyle(false)}
+                    />
+                    <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 8 }}>
+                      {QUICK_TAGS.map(tag => (
+                        <button key={tag} onClick={() => appendTag(tag)} style={{
+                          padding: '5px 12px', borderRadius: 20,
+                          border: `1px solid ${C.sand}`, background: C.parch,
+                          color: C.mahog, fontSize: 12, cursor: 'pointer',
+                          fontFamily: "'Hind Siliguri', sans-serif", transition: 'background 0.15s',
+                        }}>{tag}</button>
+                      ))}
+                    </div>
+                  </div>
+
                 </div>
               </div>
             </div>
@@ -824,26 +1119,22 @@ const CartDrawer = ({ cart, open, onClose, onUpdate, totalPrice, onCheckout, loa
             boxShadow: '0 -8px 24px rgba(30,14,5,0.06)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
-              <span style={{ color: C.mist, fontWeight: 600, fontSize: 13 }}>সর্বমোট বিল</span>
-              <span style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 28, fontWeight: 900, color: C.clay }}>৳{totalPrice}</span>
+              <span style={{ color: C.mist, fontWeight: 600, fontSize: 13 }}>{zone ? 'সর্বমোট বিল' : 'সাবটোটাল'}</span>
+              <span style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 28, fontWeight: 900, color: C.clay }}>৳{zone ? total : subtotal}</span>
             </div>
             <button
-              onClick={() => onCheckout({ name, addr, note })}
-              disabled={loading}
+              onClick={handleSubmit}
               style={{
                 width: '100%', padding: '15px 0',
-                background: loading ? C.mist : `linear-gradient(135deg, ${C.greenL}, ${C.green})`,
+                background: `linear-gradient(135deg, ${C.greenL}, ${C.green})`,
                 color: 'white', border: 'none', borderRadius: 14,
-                fontWeight: 700, fontSize: 16, cursor: loading ? 'not-allowed' : 'pointer',
+                fontWeight: 700, fontSize: 16, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-                boxShadow: loading ? 'none' : '0 6px 22px rgba(29,185,84,0.28)',
+                boxShadow: '0 6px 22px rgba(29,185,84,0.28)',
                 transition: 'all 0.25s',
               }}
             >
-              {loading
-                ? <><Loader2 size={19} style={{ animation: 'spin 1s linear infinite' }} /> প্রসেসিং...</>
-                : <><MessageCircle size={19} /> হোয়াটসঅ্যাপে অর্ডার করুন</>
-              }
+              <MessageCircle size={19} /> হোয়াটসঅ্যাপে অর্ডার করুন
             </button>
             <p style={{ textAlign: 'center', fontSize: 11, color: C.mist, marginTop: 8 }}>
               উদ্যোক্তা: নুসরাত জাহান · {WHATSAPP}
@@ -852,6 +1143,121 @@ const CartDrawer = ({ cart, open, onClose, onUpdate, totalPrice, onCheckout, loa
         )}
       </div>
     </>
+  );
+};
+
+// ─── CONFIRM ORDER MODAL ───────────────────────────────────────────────────────
+const ConfirmOrderModal = ({ order, cart, onClose, onConfirm }) => {
+  const zoneInfo = DELIVERY_ZONES.find(z => z.id === order.zone);
+  const deliveryFee = zoneInfo?.fee ?? 0;
+  const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const total = subtotal + deliveryFee;
+  const zoneLabel = zoneInfo?.label || order.zone;
+  const payLabels = { cod: 'COD 💵', bkash: 'bKash 🔵', nagad: 'Nagad 🟠' };
+  const payLabel = payLabels[order.payment] || order.payment;
+
+  const infoRows = [
+    ['👤 নাম', order.name],
+    ['📱 মোবাইল', order.phone],
+    ['📍 এলাকা', zoneLabel],
+    ['⏰ সময়', order.time],
+    ['💳 পেমেন্ট', payLabel],
+    order.address ? ['🏠 ঠিকানা', order.address] : null,
+  ].filter(Boolean);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9600, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 16px' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(30,14,5,0.65)', backdropFilter: 'blur(5px)' }} />
+      <div className="scale-in" style={{
+        position: 'relative', width: '100%', maxWidth: 420,
+        background: C.cream, borderRadius: 24,
+        boxShadow: '0 32px 72px rgba(30,14,5,0.28)',
+        maxHeight: '90vh', overflowY: 'auto',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '22px 24px 16px', borderBottom: `1px solid ${C.sand}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <h2 style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 19, fontWeight: 700, color: C.mahog }}>
+            অর্ডার নিশ্চিত করুন ✦
+          </h2>
+          <button onClick={onClose} style={{
+            background: C.parch, border: 'none', borderRadius: '50%',
+            width: 34, height: 34, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.mahog,
+          }}><X size={17} /></button>
+        </div>
+
+        <div style={{ padding: '18px 24px 24px' }}>
+          {/* Items list */}
+          <div style={{ marginBottom: 14 }}>
+            {cart.map(i => (
+              <div key={i.id + i.nameBn} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: C.mahog, marginBottom: 6 }}>
+                <span style={{ fontFamily: "'Noto Serif Bengali', serif" }}>{i.qty}× {i.nameBn.split('(')[0].trim()}</span>
+                <span style={{ color: C.clay, fontWeight: 700 }}>৳{i.price * i.qty}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Price breakdown */}
+          <div style={{ height: 1, background: C.sand, marginBottom: 10 }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: C.mist, marginBottom: 4 }}>
+            <span>সাবটোটাল</span><span>৳{subtotal}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: C.mist, marginBottom: 10 }}>
+            <span>ডেলিভারি</span><span>{deliveryFee === 0 ? 'ফ্রি' : `৳${deliveryFee}`}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 17 }}>
+            <span style={{ fontFamily: "'Noto Serif Bengali', serif", color: C.clay }}>মোট</span>
+            <span style={{ fontFamily: "'Noto Serif Bengali', serif", color: C.clay }}>৳{total}</span>
+          </div>
+
+          {/* Customer info */}
+          <div style={{ height: 1, background: C.sand, margin: '14px 0' }} />
+          <div style={{
+            background: C.parch, border: `1px solid ${C.sand}`,
+            borderRadius: 12, padding: '12px 16px',
+            display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20,
+          }}>
+            {infoRows.map(([label, value]) => (
+              <div key={label} style={{ display: 'flex', gap: 8, fontSize: 13 }}>
+                <span style={{ color: C.mist, flexShrink: 0 }}>{label}:</span>
+                <span style={{ color: C.mahog, fontWeight: 600 }}>{value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              onClick={onConfirm}
+              style={{
+                width: '100%', padding: '15px 0',
+                background: `linear-gradient(135deg, ${C.greenL}, ${C.green})`,
+                color: 'white', border: 'none', borderRadius: 14,
+                fontWeight: 700, fontSize: 15, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+                boxShadow: '0 6px 22px rgba(29,185,84,0.28)',
+              }}
+            >
+              <CheckCircle2 size={18} /> ✅ কনফার্ম করুন ও WhatsApp খুলুন
+            </button>
+            <button
+              onClick={onClose}
+              style={{
+                width: '100%', padding: '13px 0',
+                background: 'transparent', color: C.mahog,
+                border: `1.5px solid ${C.sand}`, borderRadius: 14,
+                fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                fontFamily: "'Hind Siliguri', sans-serif",
+              }}
+            >← সম্পাদনা করুন</button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -1073,16 +1479,19 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState([]);
   const [cartOpen, setCartOpen] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [toast, setToast] = useState('');
   const [heritageItem, setHeritageItem] = useState(null);
   const [thaliItem, setThaliItem] = useState(null);
+  const [confirmOrder, setConfirmOrder] = useState(null);
+  const [favorites, setFavorites] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('shh_favorites') || '[]'); } catch { return []; }
+  });
   const menuRef = useRef(null);
 
   useEffect(() => {
-    document.body.style.overflow = (cartOpen || heritageItem || thaliItem) ? 'hidden' : '';
+    document.body.style.overflow = (cartOpen || heritageItem || thaliItem || confirmOrder) ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
-  }, [cartOpen, heritageItem, thaliItem]);
+  }, [cartOpen, heritageItem, thaliItem, confirmOrder]);
 
   useEffect(() => {
     if (!toast) return;
@@ -1112,23 +1521,31 @@ export default function App() {
     );
   }, []);
 
+  const toggleFav = useCallback((id) => {
+    setFavorites(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      localStorage.setItem('shh_favorites', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const totalPrice = cart.reduce((s, i) => s + i.price * i.qty, 0);
   const totalItems = cart.reduce((s, i) => s + i.qty, 0);
 
-  const handleCheckout = ({ name, addr, note }) => {
-    if (!name.trim()) { alert('অনুগ্রহ করে আপনার নাম লিখুন।'); return; }
-    setChecking(true);
-    let msg = `*🍛 Shokher Hadi Order*\n*উদ্যোক্তা: নুসরাত জাহান*\n\n*নাম:* ${name.trim()}\n`;
-    if (addr.trim()) msg += `*ঠিকানা:* ${addr.trim()}\n`;
-    msg += `───────────────\n`;
-    cart.forEach(i => { msg += `${i.qty}× ${i.nameBn} — ৳${i.price * i.qty}\n`; });
-    msg += `───────────────\n*সর্বমোট: ৳${totalPrice}*`;
-    if (note.trim()) msg += `\n*নির্দেশনা:* ${note.trim()}`;
+  const handleCheckout = (orderObj) => {
+    setConfirmOrder(orderObj);
+  };
+
+  const handleConfirmOrder = () => {
+    if (!confirmOrder) return;
+    const deliveryFee = DELIVERY_ZONES.find(z => z.id === confirmOrder.zone)?.fee ?? 0;
+    const msg = buildWAMessage(confirmOrder, cart, totalPrice, deliveryFee);
     const a = document.createElement('a');
     a.href = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`;
     a.target = '_blank'; a.rel = 'noopener noreferrer';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => setChecking(false), 1200);
+    setConfirmOrder(null);
+    setCartOpen(false);
   };
 
   const filtered = useMemo(() => MENU.filter(item => {
@@ -1351,7 +1768,7 @@ export default function App() {
             }}>
               {filtered.map((item, i) => (
                 <div key={item.id} style={{ animation: `fadeUp 0.5s ${i * 0.06}s cubic-bezier(.22,1,.36,1) both` }}>
-                  <Card item={item} onAdd={handleAdd} onHeritage={setHeritageItem} />
+                  <Card item={item} onAdd={handleAdd} onHeritage={setHeritageItem} favorites={favorites} onToggleFav={toggleFav} />
                 </div>
               ))}
             </div>
@@ -1453,10 +1870,17 @@ export default function App() {
         cart={cart} open={cartOpen}
         onClose={() => setCartOpen(false)}
         onUpdate={updateQty}
-        totalPrice={totalPrice}
         onCheckout={handleCheckout}
-        loading={checking}
+        onAddToCart={addToCart}
       />
+      {confirmOrder && (
+        <ConfirmOrderModal
+          order={confirmOrder}
+          cart={cart}
+          onClose={() => setConfirmOrder(null)}
+          onConfirm={handleConfirmOrder}
+        />
+      )}
       <HeritageModal
         item={heritageItem}
         onClose={() => setHeritageItem(null)}
