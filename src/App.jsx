@@ -185,7 +185,7 @@ const GlobalStyle = () => {
 };
 
 // ─── PREMIUM IMAGE ─────────────────────────────────────────────────────────────
-const Img = ({ src, alt, style, className }) => {
+const Img = React.memo(({ src, alt, style, className }) => {
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState(false);
   return (
@@ -212,12 +212,12 @@ const Img = ({ src, alt, style, className }) => {
       />
     </div>
   );
-};
+});
 
 // ─── TOAST ─────────────────────────────────────────────────────────────────────
 const Toast = ({ msg }) => (
   <div style={{
-    position: 'fixed', top: 76, left: '50%', transform: 'translateX(-50%)',
+    position: 'fixed', top: 76, left: '50%',
     zIndex: 9999, pointerEvents: 'none',
     transition: 'all 0.35s cubic-bezier(.34,1.5,.64,1)',
     opacity: msg ? 1 : 0,
@@ -239,7 +239,7 @@ const Toast = ({ msg }) => (
 );
 
 // ─── CATEGORY PILL ─────────────────────────────────────────────────────────────
-const CatPill = ({ cat, active, onClick }) => {
+const CatPill = React.memo(({ cat, active, onClick }) => {
   const m = CAT_META[cat] || { icon: Grid3X3, color: C.mahog, bg: C.sandL };
   const Icon = m.icon;
   return (
@@ -261,10 +261,10 @@ const CatPill = ({ cat, active, onClick }) => {
       {cat}
     </button>
   );
-};
+});
 
 // ─── MENU CARD ─────────────────────────────────────────────────────────────────
-const Card = ({ item, onAdd, onHeritage }) => {
+const Card = React.memo(({ item, onAdd, onHeritage }) => {
   const [hov, setHov] = useState(false);
   const isFrozen = item.isFrozen;
   const isThali = item.isThali;
@@ -411,7 +411,7 @@ const Card = ({ item, onAdd, onHeritage }) => {
       </div>
     </article>
   );
-};
+});
 
 // ─── THALI BUILDER MODAL ──────────────────────────────────────────────────────
 const ThaliBuilder = ({ item, onClose, onAdd }) => {
@@ -953,7 +953,7 @@ const CAT_SHOWCASE = [
   { cat: 'পিঠা ও স্ন্যাকস', img: '/images/pitha-spread.jpg',        label: 'পিঠা ও স্ন্যাকস', sub: 'ঐতিহ্যবাহী' },
 ];
 
-const CategoryShowcase = ({ onSelect }) => (
+const CategoryShowcase = React.memo(({ onSelect }) => (
   <section style={{ maxWidth: 1200, margin: '0 auto 56px', padding: '0 20px' }}>
     <div style={{ textAlign: 'center', marginBottom: 28 }}>
       <h2 style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 30, fontWeight: 900, color: C.mahog, marginBottom: 6 }}>
@@ -975,9 +975,9 @@ const CategoryShowcase = ({ onSelect }) => (
       ))}
     </div>
   </section>
-);
+));
 
-const CatCard = ({ data, delay, onSelect }) => {
+const CatCard = React.memo(({ data, delay, onSelect }) => {
   const [hov, setHov] = useState(false);
   const m = CAT_META[data.cat] || {};
   return (
@@ -1017,10 +1017,10 @@ const CatCard = ({ data, delay, onSelect }) => {
       </div>
     </button>
   );
-};
+});
 
 // ─── FROZEN FOOD BANNER ────────────────────────────────────────────────────────
-const FrozenBanner = ({ onSelect }) => (
+const FrozenBanner = React.memo(({ onSelect }) => (
   <section style={{ maxWidth: 1200, margin: '0 auto 56px', padding: '0 20px' }}>
     <div
       onClick={() => onSelect('ফ্রোজেন ফুড')}
@@ -1065,7 +1065,7 @@ const FrozenBanner = ({ onSelect }) => (
       </div>
     </div>
   </section>
-);
+));
 
 // ─── MAIN APP ──────────────────────────────────────────────────────────────────
 export default function App() {
